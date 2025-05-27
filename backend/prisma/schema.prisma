@@ -1,0 +1,165 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum for lead status
+enum LeadStatus {
+  GREEN   // Confirmed and complete enrollment
+  YELLOW  // Started but not finished enrollment
+  RED     // Not started or abandoned process
+}
+
+// Enum for plan types
+enum PlanType {
+  WARD
+  PRIVATE_ROOM
+  DENTAL
+}
+
+// Enum for enrollment steps
+enum EnrollmentStep {
+  PERSONAL_DATA     // 1
+  DEPENDENTS_DATA   // 2
+  PLAN_SELECTION    // 3
+  DOCUMENTS         // 4
+  PAYMENT           // 5
+  ANALYSIS          // 6
+  APPROVAL          // 7
+}
+
+// Enum for activity types
+enum ActivityType {
+  CREATION
+  UPDATE
+  STEP_COMPLETED
+  DOCUMENT_SENT
+  PAYMENT_MADE
+  APPROVAL
+  REJECTION
+  CONTACT_MADE
+}
+
+// Users/leads table
+model User {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  phone             String?
+  cpf               String?        @unique
+  birthDate         DateTime?
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?
+  
+  // Professional data
+  organization      String?        // Organization where they work
+  position          String?        // Job position/role
+  employeeId        String?        // Employee ID
+  
+  // Status and control
+  leadStatus        LeadStatus     @default(RED)
+  currentStep       EnrollmentStep @default(PERSONAL_DATA)
+  lastActivityDate  DateTime       @default(now())
+  
+  // Relationships
+  dependents        Dependent[]
+  enrollmentSteps   UserEnrollmentStep[]
+  activityLogs      ActivityLog[]
+  
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  @@map("users")
+}
+
+// Dependents table
+model Dependent {
+  id                String         @id @default(cuid())
+  name              String
+  cpf               String?
+  birthDate         DateTime
+  relationship      String         // spouse, child, etc.
+  planType          PlanType?      // Selected plan for this dependent
+  
+  // Relationship
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  @@map("dependents")
+}
+
+// Table for enrollment steps control
+model UserEnrollmentStep {
+  id                String         @id @default(cuid())
+  step              EnrollmentStep
+  completed         Boolean        @default(false)
+  completionDate    DateTime?
+  notes             String?
+  
+  // Step-specific data
+  stepData          Json?          // Flexible data per step
+  
+  // Relationship
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  @@unique([userId, step])
+  @@map("user_enrollment_steps")
+}
+
+// Activity logs table
+model ActivityLog {
+  id                String         @id @default(cuid())
+  type              ActivityType
+  description       String
+  details           Json?          // Additional activity data
+  
+  // Relationship
+  userId            String
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Timestamp
+  createdAt         DateTime       @default(now())
+  
+  @@map("activity_logs")
+}
+
+// Admin users table
+model AdminUser {
+  id                String         @id @default(cuid())
+  username          String         @unique
+  email             String         @unique
+  password          String         // Hashed password
+  name              String
+  role              String         @default("admin") // admin, super_admin, etc.
+  isActive          Boolean        @default(true)
+  lastLogin         DateTime?
+  
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  @@map("admin_users")
+}
