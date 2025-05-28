@@ -27,18 +27,14 @@ const Planos = () => {
         "Pediatria e ginecologia",
         "Telemedicina incluída",
       ],
-      notIncluded: [
-        "Internação em apartamento",
-        "Acompanhante em internação",
-        "Medicina estética",
-      ],
+      notIncluded: ["Internação em apartamento", "Medicina estética"],
       buttonText: "Escolher Enfermaria",
       buttonClass: "bg-blue-600 hover:bg-blue-700 text-white",
     },
     {
       id: "apartamento",
       name: "Plano Apartamento",
-      price: "211",
+      price: "211,25",
       originalPrice: "249",
       discount: "15%",
       description: "Mais conforto e privacidade. Atendimento com excelência.",
@@ -56,7 +52,6 @@ const Planos = () => {
         "Telemedicina incluída",
         "Acompanhante em internação",
         "Quarto privativo",
-        "Atendimento personalizado",
       ],
       notIncluded: ["Medicina estética"],
       buttonText: "Escolher Apartamento",
@@ -79,6 +74,7 @@ const Planos = () => {
       "Radiografias odontológicas",
       "Cirurgias odontológicas",
       "Atendimento de urgência 24h",
+      "Cobertura Nacional",
     ],
   };
 
@@ -110,8 +106,7 @@ const Planos = () => {
       items: [
         "Atendimento 24 horas",
         "Pronto-socorro médico",
-        "Ambulância quando necessário",
-        "Atendimento domiciliar de urgência",
+        "Ambulância",
         "Remoção inter-hospitalar",
         "Suporte avançado de vida",
       ],
@@ -127,6 +122,7 @@ const Planos = () => {
         "Pediatria e neonatologia",
         "Psiquiatria e psicologia",
         "Fisioterapia e reabilitação",
+        "E todas as demais especialidades cobertas pelo Rol da ANS",
       ],
     },
   ];
@@ -141,8 +137,7 @@ const Planos = () => {
     {
       icon: <Heart className="w-8 h-8 text-blue-600" />,
       title: "Sem Carência",
-      description:
-        "Consultas e exames sem período de carência. Internações com carência reduzida.",
+      description: "Consultas, exames e internações sem período de carência.",
     },
     {
       icon: <Users className="w-8 h-8 text-blue-600" />,
@@ -411,7 +406,7 @@ const Planos = () => {
               </Link>
               <Button
                 variant="outline"
-                className="border-white text-white hover:bg-white hover:text-blue-800 px-8 py-3 font-bold text-lg"
+                className="border-white hover:text-yellow-400 hover:bg-white text-blue-800 px-8 py-3 font-bold text-lg"
               >
                 <a href="https://wa.me/5564999999999">Falar com Especialista</a>
               </Button>

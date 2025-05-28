@@ -18,7 +18,7 @@ const HowItWorksSection = () => {
       number: "03",
       title: "Aguarde a liberação",
       description:
-        "Nosso time irá analisar e liberar seu acesso em até 48 horas",
+        "Nosso time irá analisar e liberar seu acesso após a confirmação da carteirinha",
     },
     {
       number: "04",

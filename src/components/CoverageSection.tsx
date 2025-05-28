@@ -119,7 +119,7 @@ const CoverageSection = () => {
               </div>
 
               <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 font-semibold">
-                Conhecer cobertura
+                <a href="/planos">Conhecer cobertura</a>
               </Button>
             </div>
 
