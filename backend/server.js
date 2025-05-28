@@ -23,26 +23,81 @@ app.use(
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: config.RATE_LIMIT_WINDOW_MS,
-  max: config.RATE_LIMIT_MAX_REQUESTS,
+  windowMs:
+    config.NODE_ENV === "development" ? 1000 : config.RATE_LIMIT_WINDOW_MS,
+  max: config.NODE_ENV === "development" ? 100 : config.RATE_LIMIT_MAX_REQUESTS,
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req, res) =>
+    config.NODE_ENV === "development" && req.method === "OPTIONS",
 });
 
 app.use("/api/", limiter);
 
 // CORS configuration
+app.use((req, res, next) => {
+  // Permitir domínios específicos
+  const allowedOrigins = [
+    config.FRONTEND_URL,
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    config.PRODUCTION_FRONTEND_URL,
+  ];
+
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+// Previous CORS middleware (mantido para compatibilidade)
 app.use(
   cors({
-    origin: [config.FRONTEND_URL, "http://localhost:3000"],
+    origin: [
+      config.FRONTEND_URL,
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "http://127.0.0.1:8080",
+      config.PRODUCTION_FRONTEND_URL,
+    ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cookie",
+      "X-Requested-With",
+    ],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
+
+// Handle OPTIONS requests globally
+app.options("*", (req, res) => {
+  res.status(200).end();
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
@@ -136,6 +191,17 @@ app.listen(PORT, () => {
   console.log(`📊 Environment: ${config.NODE_ENV}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
   console.log(`📋 API docs: http://localhost:${PORT}/`);
+  console.log(`🔗 Frontend URL: ${config.FRONTEND_URL}`);
+
+  if (config.IS_PRODUCTION) {
+    console.log("✅ Running in PRODUCTION mode");
+    console.log(`🌎 Production API URL: ${config.PRODUCTION_URL}`);
+    console.log(
+      `🌎 Production Frontend URL: ${config.PRODUCTION_FRONTEND_URL}`
+    );
+  } else {
+    console.log("🛠️ Running in DEVELOPMENT mode");
+  }
 });
 
 export default app;

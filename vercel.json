@@ -1,3 +1,14 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "devCommand": "npm run dev",
+  "cleanUrls": true,
+  "framework": "vite",
+  "regions": ["sfo1"],
+  "env": {
+    "NODE_ENV": "production",
+    "REACT_APP_API_URL": "https://plano-de-saude-servidores-publicos.onrender.com",
+    "REACT_APP_FRONTEND_URL": "https://plano-de-saude-servidores-publicos.vercel.app"
+  }
 }

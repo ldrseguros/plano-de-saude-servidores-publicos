@@ -104,27 +104,52 @@ const Adesao = () => {
     // Se o usuário já tiver dados básicos preenchidos
     const saveProgress = async () => {
       if (
-        dadosTitular.nome.trim() &&
-        dadosTitular.email.trim() &&
+        dadosTitular.nome?.trim() &&
+        dadosTitular.email?.trim() &&
         etapaAtual > 1
       ) {
         console.log("Salvando progresso automaticamente na etapa", etapaAtual);
         try {
+          // Usar debounce para evitar múltiplas chamadas
+          const savedUserId = localStorage.getItem("last_saved_user_id");
+          const lastSaveTime = localStorage.getItem("last_save_time");
+          const now = Date.now();
+
+          // Não salvar se já salvou nos últimos 10 segundos
+          if (lastSaveTime && now - parseInt(lastSaveTime) < 10000) {
+            console.log("Salvamento ignorado - muito recente");
+            return;
+          }
+
+          // Verificar se há erros recentes de API
+          const lastApiErrorTime = localStorage.getItem("last_api_error_time");
+          if (lastApiErrorTime && now - parseInt(lastApiErrorTime) < 10000) {
+            console.log("Salvamento ignorado - erro recente na API");
+            return;
+          }
+
           const result = await savePartialProgress();
           if (result.success) {
+            localStorage.setItem("last_saved_user_id", result.userId);
+            localStorage.setItem("last_save_time", now.toString());
             console.log(
               "Progresso salvo automaticamente, userId:",
               result.userId
             );
+          } else if (result.error) {
+            console.warn("Não foi possível salvar progresso:", result.error);
+            // Não mostrar erro ao usuário para não interromper a experiência
           }
         } catch (error) {
           console.error("Erro ao salvar progresso automaticamente:", error);
+          // Marcar erro para evitar tentativas repetidas
+          localStorage.setItem("last_api_error_time", Date.now().toString());
         }
       }
     };
 
     saveProgress();
-  }, [etapaAtual, dadosTitular, savePartialProgress]); // Salva sempre que a etapa ou os dados do titular mudarem
+  }, [etapaAtual]); // Salvar apenas quando a etapa mudar, não com cada alteração de dados
 
   // Função para finalizar a adesão
   const finalizarAdesao = async () => {
@@ -132,9 +157,21 @@ const Adesao = () => {
       return;
     }
 
-    const result = await submitAdesao();
-    if (result.success) {
-      console.log("Adesão realizada com sucesso!", result.userId);
+    try {
+      const result = await submitAdesao();
+      if (result.success) {
+        console.log("Adesão realizada com sucesso!", result.userId);
+
+        // Adicionar timeout para garantir que o estado é atualizado antes de mostrar etapa 7
+        setTimeout(() => {
+          // Forçar a atualização da etapa para 7 (confirmação)
+          setEtapaAtual(7);
+        }, 500);
+      } else {
+        console.error("Erro ao finalizar adesão:", result.error);
+      }
+    } catch (error) {
+      console.error("Exceção ao finalizar adesão:", error);
     }
   };
 

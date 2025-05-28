@@ -234,7 +234,8 @@ const Admin = () => {
   // Redirecionar para a página de login se não autenticado
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      navigate("/admin/login");
+      console.log("Usuário não autenticado, redirecionando para login");
+      navigate("/admin/login", { replace: true });
     }
   }, [isAuthenticated, authLoading, navigate]);
 

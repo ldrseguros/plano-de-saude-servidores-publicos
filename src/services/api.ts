@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:5000";
+import config from "../config/env";
+
+const API_BASE_URL = config.API_URL;
 export { API_BASE_URL };
 
 // Tipos para as requisições
@@ -126,6 +128,7 @@ class ApiService {
     // Adicionar token de autenticação se existir
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
       ...(options.headers as Record<string, string>),
     };
 
@@ -135,11 +138,21 @@ class ApiService {
 
     const config: RequestInit = {
       headers,
+      credentials: "include",
       ...options,
     };
 
     try {
+      console.log(`Fazendo requisição para: ${url}`, config);
       const response = await fetch(url, config);
+
+      // Verificar headers de resposta para debug
+      console.log("Headers da resposta:", {
+        cors: response.headers.get("Access-Control-Allow-Origin"),
+        methods: response.headers.get("Access-Control-Allow-Methods"),
+        headers: response.headers.get("Access-Control-Allow-Headers"),
+      });
+
       const data = await response.json();
 
       if (!response.ok) {

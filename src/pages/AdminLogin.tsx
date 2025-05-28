@@ -33,10 +33,12 @@ const AdminLogin: React.FC = () => {
 
   // Redirecionar para admin se já estiver autenticado
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/admin");
+    // Apenas redirecionar se não estiver carregando e estiver autenticado
+    if (!authLoading && isAuthenticated) {
+      console.log("Usuário autenticado, redirecionando para /admin");
+      navigate("/admin", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -156,12 +158,12 @@ const AdminLogin: React.FC = () => {
           </Button>
 
           <Grid container>
-            <Grid item xs>
+            <Grid sx={{ flexGrow: 1 }}>
               <Link href="#" variant="body2">
                 Esqueceu a senha?
               </Link>
             </Grid>
-            <Grid item>
+            <Grid>
               <Link
                 onClick={goToRegister}
                 variant="body2"

@@ -234,7 +234,7 @@ const AdminRegister: React.FC = () => {
           </Button>
 
           <Grid container justifyContent="flex-end">
-            <Grid item>
+            <Grid>
               <Link
                 onClick={goToLogin}
                 variant="body2"

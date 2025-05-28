@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   createUser,
   createDependent,
@@ -163,6 +163,19 @@ export const useAdesao = () => {
 
   // Função para salvar progresso parcial (usuário começou mas não terminou)
   const savePartialProgress = async () => {
+    // Verificar se há uma flag indicando erro recente para evitar repetição
+    const lastErrorTime = localStorage.getItem("last_api_error_time");
+    const now = Date.now();
+
+    if (lastErrorTime && now - parseInt(lastErrorTime) < 10000) {
+      // 10 segundos
+      console.log("Ignorando salvamento devido a erro recente na API");
+      return {
+        success: false,
+        error: "Erro recente na API, tentando novamente mais tarde",
+      };
+    }
+
     if (!state.dadosTitular.nome || !state.dadosTitular.email) {
       return { success: false, error: "Dados mínimos não informados" }; // Não salvar se não tiver dados mínimos
     }
@@ -183,6 +196,17 @@ export const useAdesao = () => {
             );
             return { success: true, userId };
           }
+
+          // Verificar se já salvamos recentemente
+          const lastSaveTime = localStorage.getItem(`last_save_time_${userId}`);
+          if (lastSaveTime) {
+            const now = Date.now();
+            if (now - parseInt(lastSaveTime) < 5000) {
+              // 5 segundos
+              console.log(`Salvamento recente para ${userId}. Ignorando.`);
+              return { success: true, userId };
+            }
+          }
         } catch (e) {
           console.error("Erro ao verificar localStorage:", e);
         }
@@ -190,161 +214,66 @@ export const useAdesao = () => {
 
       console.log("Salvando progresso parcial...");
 
-      // Preparar dados básicos do usuário
-      const userData: CreateUserRequest = {
-        name: state.dadosTitular.nome,
-        email: state.dadosTitular.email,
-        phone: state.dadosTitular.telefone || "Não informado",
-        cpf: state.dadosTitular.cpf || "Não informado",
-        birthDate:
-          state.dadosTitular.dataNascimento || new Date().toISOString(),
-        address: state.dadosTitular.endereco || "Não informado",
-        city: state.dadosTitular.cidade || "Não informado",
-        state: "GO",
-        zipCode: state.dadosTitular.cep || "Não informado",
-        organization: "Servidor Público",
-        position: "Servidor",
-        employeeId: `SP${Date.now()}`,
-        planType:
-          state.planoSelecionado === "apartamento" ? "PRIVATE_ROOM" : "WARD",
-        hasOdontologico: state.odontologico,
-      };
-
-      // Verificar se o usuário já existe
-      if (!userId) {
-        // Primeiro, verificar se o usuário já existe
-        try {
-          const searchResponse = await fetch(
-            `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
-              userData.email
-            )}`
-          );
-          const searchData = await searchResponse.json();
-
-          if (
-            searchData.success &&
-            searchData.data &&
-            searchData.data.length > 0
-          ) {
-            // Usuário já existe
-            userId = searchData.data[0].id;
-            console.log(`Usuário já existe, ID recuperado: ${userId}`);
-
-            // Atualizar dados
-            const userUpdateData = { ...userData };
-            delete userUpdateData.planType;
-            delete userUpdateData.hasOdontologico;
-
-            await apiService.updateUser(userId, userUpdateData);
-          } else {
-            // Usuário não existe, criar novo
-            console.log("Usuário não encontrado, criando novo...");
-            const userResponse = await createUser(userData);
-            userId = userResponse.data.id;
-            console.log("Usuário criado com ID:", userId);
-          }
-        } catch (error) {
-          // Se houver erro na busca, tentar criar diretamente
-          console.error("Erro ao verificar usuário existente:", error);
-
-          try {
-            // Tentar criar usuário
-            const userResponse = await createUser(userData);
-            userId = userResponse.data.id;
-            console.log("Usuário criado com ID:", userId);
-          } catch (createError) {
-            // Se o usuário já existir, vamos buscar pelo email
-            if (
-              createError instanceof Error &&
-              createError.message.includes("already exists")
-            ) {
-              console.log("Usuário já existe, buscando por email...");
-
-              // Buscar pelo email para obter o ID
-              const response = await fetch(
-                `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
-                  userData.email
-                )}`
-              );
-              const data = await response.json();
-
-              if (data.success && data.data && data.data.length > 0) {
-                userId = data.data[0].id;
-                console.log("Usuário encontrado com ID:", userId);
-              } else {
-                throw new Error(
-                  "Não foi possível encontrar o usuário existente"
-                );
-              }
-            } else {
-              throw createError;
-            }
-          }
-        }
-      } else {
+      // Se já temos userId, retornar sem fazer chamada à API
+      if (userId) {
         console.log(`Usando ID existente: ${userId}`);
+        localStorage.setItem(`last_save_time_${userId}`, Date.now().toString());
+        return { success: true, userId };
       }
 
-      updateState({ userId });
-
-      // Determinar etapa atual baseada no progresso
-      let currentStep = "PERSONAL_DATA";
-
-      if (state.dependentes.length > 0) {
-        currentStep = "DEPENDENTS_DATA";
-      } else if (state.planoSelecionado) {
-        currentStep = "PLAN_SELECTION";
-      }
-
-      // Verificar o status atual do usuário antes de atualizar
+      // A partir daqui, apenas executar o código se não tivermos userId
       try {
-        const userCheck = await apiService.getUser(userId);
-        console.log(
-          "Status atual antes da atualização:",
-          userCheck.data.leadStatus,
-          userCheck.data.currentStep
-        );
+        // Preparar dados básicos do usuário
+        const userData: CreateUserRequest = {
+          name: state.dadosTitular.nome,
+          email: state.dadosTitular.email,
+          phone: state.dadosTitular.telefone || "Não informado",
+          cpf: state.dadosTitular.cpf || "Não informado",
+          birthDate:
+            state.dadosTitular.dataNascimento || new Date().toISOString(),
+          address: state.dadosTitular.endereco || "Não informado",
+          city: state.dadosTitular.cidade || "Não informado",
+          state: "GO",
+          zipCode: state.dadosTitular.cep || "Não informado",
+          organization: "Servidor Público",
+          position: "Servidor",
+          employeeId: `SP${Date.now()}`,
+          planType:
+            state.planoSelecionado === "apartamento" ? "PRIVATE_ROOM" : "WARD",
+          hasOdontologico: state.odontologico,
+        };
 
-        // Não rebaixar status se já estiver GREEN (finalizado)
-        if (userCheck.data.leadStatus === "GREEN") {
-          console.log(
-            "Usuário já está com status GREEN (finalizado). Mantendo status atual."
-          );
-          return { success: true, userId };
-        }
+        // Tentar criar usuário
+        const userResponse = await createUser(userData);
+        userId = userResponse.data.id;
+        console.log("Usuário criado com ID:", userId);
+
+        // Salvar ID e tempo no localStorage
+        updateState({ userId });
+        localStorage.setItem(`last_save_time_${userId}`, Date.now().toString());
+        return { success: true, userId };
       } catch (error) {
-        console.error("Erro ao verificar status atual do usuário:", error);
-      }
+        // Marcar erro recente para evitar ciclos repetidos
+        localStorage.setItem("last_api_error_time", Date.now().toString());
 
-      // Forçar atualização para YELLOW apenas se não estiver finalizado
-      console.log(`Atualizando status para YELLOW, etapa: ${currentStep}`);
+        console.error("Erro ao criar usuário:", error);
 
-      // Usar chamada direta para garantir a atualização
-      const statusResponse = await fetch(
-        `${API_BASE_URL}/api/users/${userId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            leadStatus: "YELLOW",
-            currentStep: currentStep,
-            notes: "Processo de adesão em andamento",
-          }),
+        // Gerar ID temporário local se não conseguirmos criar usuário no servidor
+        if (!userId) {
+          const tempId = `temp_${Date.now()}`;
+          console.log("Criando ID temporário local:", tempId);
+          updateState({ userId: tempId });
+          return { success: true, userId: tempId };
         }
-      );
 
-      const statusResult = await statusResponse.json();
-      console.log("Resultado da atualização de status:", statusResult);
-
-      // Verificar se o status foi atualizado corretamente
-      const userCheckAfter = await apiService.getUser(userId);
-      console.log("Status atual do usuário:", userCheckAfter.data.leadStatus);
-
-      return { success: true, userId };
+        return { success: false, error };
+      }
     } catch (error) {
       console.error("Erro ao salvar progresso parcial:", error);
+
+      // Marcar erro recente para evitar ciclos repetidos
+      localStorage.setItem("last_api_error_time", Date.now().toString());
+
       return { success: false, error };
     }
   };
@@ -378,78 +307,102 @@ export const useAdesao = () => {
 
       // Verificar se usuário já existe
       let userId = state.userId;
+      let needToCreateUser = false;
 
-      if (!userId) {
+      // Se temos um ID temporário ou nenhum ID, precisamos criar um usuário real no banco
+      if (!userId || (userId && userId.toString().startsWith("temp_"))) {
+        if (userId && userId.toString().startsWith("temp_")) {
+          console.log(
+            `ID temporário detectado: ${userId}. Precisamos criar um usuário real.`
+          );
+        } else {
+          console.log("Nenhum ID de usuário. Precisamos criar um novo.");
+        }
+        needToCreateUser = true;
+      }
+
+      // Se precisamos criar um usuário real, primeiro verificar se já existe por email/CPF
+      if (needToCreateUser) {
         try {
-          // Tentar buscar usuário existente por email ou CPF
-          console.log("Verificando se usuário já existe...");
+          console.log("Verificando se usuário já existe por email/CPF...");
           const searchResponse = await fetch(
             `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
               userData.email
             )}&cpf=${encodeURIComponent(userData.cpf || "")}`
           );
-          const searchData = await searchResponse.json();
 
-          if (
-            searchData.success &&
-            searchData.data &&
-            searchData.data.length > 0
-          ) {
-            userId = searchData.data[0].id;
-            console.log(
-              `Usuário já existe no sistema com ID: ${userId}. Atualizando dados...`
-            );
-
-            // Remover campos que não existem no modelo User do Prisma
-            const userUpdateData = { ...userData };
-            delete userUpdateData.planType;
-            delete userUpdateData.hasOdontologico;
-
-            await apiService.updateUser(userId, userUpdateData);
-          } else {
-            // Criar novo usuário
-            console.log("Usuário não encontrado. Criando novo...");
+          if (!searchResponse.ok) {
+            console.log("Erro na busca de usuário. Criando um novo.");
             const userResponse = await createUser(userData);
             userId = userResponse.data.id;
             console.log("Usuário criado com sucesso, ID:", userId);
+          } else {
+            const searchData = await searchResponse.json();
+
+            if (
+              searchData.success &&
+              searchData.data &&
+              searchData.data.length > 0
+            ) {
+              userId = searchData.data[0].id;
+              console.log(
+                `Usuário já existe com ID: ${userId}. Atualizando dados...`
+              );
+
+              // Atualizar dados do usuário existente
+              const userUpdateData = { ...userData };
+              delete userUpdateData.planType;
+              delete userUpdateData.hasOdontologico;
+
+              await apiService.updateUser(userId, userUpdateData);
+            } else {
+              // Nenhum usuário encontrado, criar novo
+              console.log(
+                "Nenhum usuário existente encontrado. Criando novo..."
+              );
+              const userResponse = await createUser(userData);
+              userId = userResponse.data.id;
+              console.log("Usuário criado com sucesso, ID:", userId);
+            }
           }
         } catch (error) {
-          // Se houver erro na busca, tentar criar mesmo assim
-          console.error("Erro ao verificar usuário existente:", error);
+          console.error("Erro ao verificar/criar usuário:", error);
 
-          // Tentar criar o usuário
+          // Tentar criar novo usuário em caso de erro
           try {
             const userResponse = await createUser(userData);
             userId = userResponse.data.id;
-            console.log(
-              "Usuário criado com sucesso após erro na verificação, ID:",
-              userId
-            );
+            console.log("Usuário criado após erro de verificação, ID:", userId);
           } catch (createError) {
-            // Se o erro for de usuário já existente, buscar o ID
             if (
               createError instanceof Error &&
               createError.message.includes("already exists")
             ) {
               console.log("Usuário já existe, buscando ID...");
 
-              const searchResponse = await fetch(
-                `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
-                  userData.email
-                )}`
-              );
-              const searchData = await searchResponse.json();
+              try {
+                const searchResponse = await fetch(
+                  `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
+                    userData.email
+                  )}`
+                );
+                const searchData = await searchResponse.json();
 
-              if (
-                searchData.success &&
-                searchData.data &&
-                searchData.data.length > 0
-              ) {
-                userId = searchData.data[0].id;
-                console.log(`Recuperado ID do usuário existente: ${userId}`);
-              } else {
+                if (
+                  searchData.success &&
+                  searchData.data &&
+                  searchData.data.length > 0
+                ) {
+                  userId = searchData.data[0].id;
+                  console.log(`Recuperado ID do usuário existente: ${userId}`);
+                } else {
+                  throw new Error(
+                    "Não foi possível recuperar o ID do usuário existente."
+                  );
+                }
+              } catch (searchError) {
                 throw new Error(
-                  "Não foi possível recuperar o ID do usuário existente."
+                  "Falha ao buscar usuário existente: " + searchError.message
                 );
               }
             } else {
@@ -458,10 +411,8 @@ export const useAdesao = () => {
           }
         }
       } else {
-        // Se já temos userId, apenas atualizar os dados
-        console.log(`Usando ID existente ${userId}. Atualizando dados...`);
-
-        // Remover campos que não existem no modelo User do Prisma
+        // Temos um ID real, apenas atualizar
+        console.log(`Atualizando usuário existente com ID: ${userId}`);
         const userUpdateData = { ...userData };
         delete userUpdateData.planType;
         delete userUpdateData.hasOdontologico;
@@ -469,239 +420,31 @@ export const useAdesao = () => {
         await apiService.updateUser(userId, userUpdateData);
       }
 
+      // Atualizar o ID no estado
       updateState({ userId });
 
-      console.log("Atualizando status para YELLOW (PERSONAL_DATA)");
-      // Atualizar status inicial para YELLOW (processo iniciado)
-      await apiService.updateUserStatus(userId, "YELLOW", "PERSONAL_DATA");
-
-      // Pausa para garantir que a atualização seja processada
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Criar dependentes se houver
-      if (state.dependentes.length > 0) {
-        // Atualizar para etapa de dependentes
-        await apiService.updateUserStatus(userId, "YELLOW", "DEPENDENTS_DATA");
-        console.log("Status atualizado para YELLOW (DEPENDENTS_DATA)");
-
-        // Pausa para garantir que a atualização seja processada
-        await new Promise((resolve) => setTimeout(resolve, 300));
-
-        // Processar dependentes em lote
-        try {
-          console.log(
-            `Processando ${state.dependentes.length} dependentes em lote`
-          );
-
-          // Preparar dados dos dependentes
-          const dependentsData = state.dependentes.map((dep) => ({
-            name: dep.nome,
-            cpf: dep.cpf,
-            birthDate: dep.dataNascimento,
-            relationship: dep.parentesco,
-            planType: (state.planoSelecionado === "apartamento"
-              ? "PRIVATE_ROOM"
-              : "WARD") as "PRIVATE_ROOM" | "WARD",
-            userId,
-          }));
-
-          // Atualizar dependentes em lote
-          const bulkResult = await updateDependentsBulk(
-            userId,
-            dependentsData,
-            true
-          );
-
-          console.log(
-            "Resultado da atualização em lote dos dependentes:",
-            bulkResult
-          );
-
-          if (bulkResult.success) {
-            console.log(
-              `Dependentes processados: ${bulkResult.data.summary.created} criados, ` +
-                `${bulkResult.data.summary.updated} atualizados, ` +
-                `${bulkResult.data.summary.deleted} removidos`
-            );
-          }
-        } catch (error) {
-          console.error("Erro ao processar dependentes em lote:", error);
-
-          // Fallback para o método anterior caso ocorra algum erro
-          console.log(
-            "Usando método de fallback para adicionar dependentes individualmente"
-          );
-
-          for (const dependente of state.dependentes) {
-            const dependentData: CreateDependentRequest = {
-              userId,
-              name: dependente.nome,
-              cpf: dependente.cpf,
-              birthDate: dependente.dataNascimento,
-              relationship: dependente.parentesco,
-              planType:
-                state.planoSelecionado === "apartamento"
-                  ? "PRIVATE_ROOM"
-                  : "WARD",
-            };
-
-            try {
-              await createDependent(dependentData);
-              console.log(
-                `Dependente ${dependente.nome} adicionado com sucesso`
-              );
-            } catch (error) {
-              console.error(
-                `Erro ao adicionar dependente ${dependente.nome}:`,
-                error
-              );
-              // Continuar mesmo se houver erro em um dependente
-            }
-          }
-        }
+      // Marcar no localStorage que este usuário tem adesão finalizada
+      try {
+        localStorage.setItem(`completed_enrollment_${userId}`, "true");
+        localStorage.setItem(`last_save_time_${userId}`, Date.now().toString());
+        console.log(
+          `Marcado no localStorage que o usuário ${userId} tem adesão finalizada`
+        );
+      } catch (e) {
+        console.error("Erro ao salvar no localStorage:", e);
       }
 
-      // Atualizar para etapa de seleção de plano com status YELLOW
-      await apiService.updateUserStatus(userId, "YELLOW", "PLAN_SELECTION");
-      console.log("Status atualizado para YELLOW (PLAN_SELECTION)");
-
-      // Pausa para garantir que a atualização seja processada
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Salvar detalhes do plano selecionado como um passo completo
+      // Atualizar status do usuário para GREEN
+      console.log("Atualizando status para GREEN (APPROVAL)");
       try {
-        const planSelectionData = {
-          planType:
-            state.planoSelecionado === "apartamento" ? "PRIVATE_ROOM" : "WARD",
-          hasOdontologico: state.odontologico,
-          monthlyValue: calcularValorTotal(),
-        };
-
-        // Usar a API para completar o passo de seleção de plano
-        await fetch(
-          `${API_BASE_URL}/api/enrollment/user/${userId}/step/PLAN_SELECTION/complete`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              notes: `Plano ${state.planoSelecionado}, Odonto: ${
-                state.odontologico ? "Sim" : "Não"
-              }`,
-              stepData: planSelectionData,
-            }),
-          }
-        );
-
-        console.log("Detalhes do plano salvos com sucesso:", planSelectionData);
+        await apiService.updateUserStatus(userId, "GREEN", "APPROVAL");
       } catch (error) {
-        console.error("Erro ao salvar detalhes do plano:", error);
+        console.error("Erro ao atualizar status do usuário:", error);
         // Continuar mesmo com erro
       }
 
-      // Simular progresso através das etapas restantes
-      await apiService.updateUserStatus(userId, "YELLOW", "DOCUMENTS");
-      console.log("Status atualizado para YELLOW (DOCUMENTS)");
-
-      // Pausa para garantir que a atualização seja processada
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      await apiService.updateUserStatus(userId, "YELLOW", "PAYMENT");
-      console.log("Status atualizado para YELLOW (PAYMENT)");
-
-      // Pausa para garantir que a atualização seja processada
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      await apiService.updateUserStatus(userId, "YELLOW", "ANALYSIS");
-      console.log("Status atualizado para YELLOW (ANALYSIS)");
-
-      // Pausa para garantir que a atualização seja processada
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Forçar uma atualização direta do status para GREEN usando a API
-      const directUpdateResponse = await fetch(
-        `${API_BASE_URL}/api/users/${userId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            leadStatus: "GREEN",
-            currentStep: "APPROVAL",
-            notes: "Adesão finalizada com sucesso",
-          }),
-        }
-      );
-
-      const directUpdateResult = await directUpdateResponse.json();
-      console.log(
-        "Resultado da atualização direta para GREEN:",
-        directUpdateResult
-      );
-
-      // Garantir atualização final com status GREEN na aprovação
-      await apiService.updateUserStatus(userId, "GREEN", "APPROVAL");
-      console.log("Status final atualizado para GREEN (APPROVAL)");
-
-      // Verificar o status atual depois de todas as atualizações
-      const userCheck = await apiService.getUser(userId);
-      console.log("Status final do usuário:", userCheck.data.leadStatus);
-
-      // Se por algum motivo o status não estiver GREEN, tentar novamente com chamada direta
-      if (userCheck.data.leadStatus !== "GREEN") {
-        console.log("Status não está GREEN, tentando atualizar novamente...");
-
-        try {
-          // Tentar mais uma vez com uma nova chamada direta
-          const finalUpdateResponse = await fetch(
-            `${API_BASE_URL}/api/users/${userId}/status`,
-            {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                leadStatus: "GREEN",
-                currentStep: "APPROVAL",
-                notes: "Adesão finalizada com sucesso - Correção final",
-              }),
-            }
-          );
-
-          const finalUpdateResult = await finalUpdateResponse.json();
-          console.log(
-            "Resultado da correção final para GREEN:",
-            finalUpdateResult
-          );
-
-          // Marcar no localStorage que este usuário tem adesão finalizada
-          try {
-            localStorage.setItem(`completed_enrollment_${userId}`, "true");
-            console.log(
-              `Marcado no localStorage que o usuário ${userId} tem adesão finalizada`
-            );
-          } catch (e) {
-            console.error("Erro ao salvar no localStorage:", e);
-          }
-        } catch (finalError) {
-          console.error("Erro na correção final do status:", finalError);
-        }
-      } else {
-        // Marcar no localStorage que este usuário tem adesão finalizada
-        try {
-          localStorage.setItem(`completed_enrollment_${userId}`, "true");
-          console.log(
-            `Marcado no localStorage que o usuário ${userId} tem adesão finalizada`
-          );
-        } catch (e) {
-          console.error("Erro ao salvar no localStorage:", e);
-        }
-      }
-
-      // Ir para a etapa final
-      setEtapaAtual(7);
+      // Atualizar etapa no componente
+      updateState({ etapaAtual: 7 });
 
       return { success: true, userId };
     } catch (error) {
@@ -709,7 +452,6 @@ export const useAdesao = () => {
 
       if (error instanceof Error) {
         if (error.message.includes("already exists")) {
-          // Mostrar modal específico para usuário existente
           console.log(
             "Usuário já existe, mostrando modal de usuário existente"
           );
