@@ -17,8 +17,8 @@ export interface CreateUserRequest {
   organization: string;
   position: string;
   employeeId: string;
-  planType?: "WARD" | "PRIVATE_ROOM";
-  hasOdontologico?: boolean;
+  planType: "WARD" | "PRIVATE_ROOM" | "DENTAL";
+  hasOdontologico: boolean;
 }
 
 export interface CreateDependentRequest {
@@ -69,6 +69,18 @@ export interface Dependent {
   birthDate: string;
   relationship: string;
   planType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserDocument {
+  id: string;
+  userId: string;
+  type: string;
+  name: string;
+  path: string;
+  mimeType: string;
+  size: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -271,7 +283,7 @@ class ApiService {
   // Métodos para enrollment
   async getEnrollmentSteps(userId?: string) {
     const endpoint = userId
-      ? `/api/enrollment/steps/${userId}`
+      ? `/api/enrollment/user/${userId}/steps`
       : "/api/enrollment/steps";
     return this.request<Record<string, unknown>>(endpoint);
   }
@@ -279,19 +291,57 @@ class ApiService {
   async updateEnrollmentStep(
     userId: string,
     step: string,
-    completed: boolean,
-    notes?: string
+    completed:
+      | boolean
+      | {
+          completed: boolean;
+          notes?: string;
+          signatureData?: string;
+          stepData?: Record<string, unknown>;
+        }
   ) {
+    let requestBody: Record<string, unknown>;
+
+    if (typeof completed === "boolean") {
+      requestBody = {
+        step,
+        completed,
+      };
+    } else {
+      requestBody = {
+        step,
+        completed: completed.completed,
+        notes: completed.notes,
+        signatureData: completed.signatureData,
+        stepData: completed.stepData,
+      };
+    }
+
     return this.request<Record<string, unknown>>(
-      `/api/enrollment/steps/${userId}`,
+      `/api/enrollment/user/${userId}/step/${step}`,
       {
         method: "POST",
-        body: JSON.stringify({
-          step,
-          completed,
-          notes,
-        }),
+        body: JSON.stringify(requestBody),
       }
+    );
+  }
+
+  // Get user documents
+  async getUserDocuments(userId: string) {
+    return this.request<UserDocument[]>(
+      `/api/enrollment/user/${userId}/documents`
+    );
+  }
+
+  // Get document download URL
+  getDocumentDownloadUrl(documentId: string) {
+    return `${this.baseURL}/api/enrollment/documents/${documentId}/download`;
+  }
+
+  // Get document diagnostics
+  async getDocumentDiagnostics(documentId: string) {
+    return this.request<Record<string, unknown>>(
+      `/api/enrollment/documents/${documentId}/diagnostics`
     );
   }
 
@@ -368,6 +418,18 @@ export const updateDependentsBulk = (
   dependents: Array<Partial<CreateDependentRequest>>,
   replaceAll: boolean = false
 ) => apiService.updateDependentsBulk(userId, dependents, replaceAll);
+
+// Get user documents
+export const getUserDocuments = (userId: string) =>
+  apiService.getUserDocuments(userId);
+
+// Get document download URL
+export const getDocumentDownloadUrl = (documentId: string) =>
+  apiService.getDocumentDownloadUrl(documentId);
+
+// Get document diagnostics
+export const getDocumentDiagnostics = (documentId: string) =>
+  apiService.getDocumentDiagnostics(documentId);
 
 // Exportar a instância da API para uso direto
 export const api = apiService;

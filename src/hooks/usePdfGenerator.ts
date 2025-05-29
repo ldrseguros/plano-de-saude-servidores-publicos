@@ -1,6 +1,7 @@
 import { useState } from "react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { apiService } from "@/services/api";
 
 interface AdesaoData {
   dadosTitular: {
@@ -23,6 +24,7 @@ interface AdesaoData {
   }>;
   valorTotal: number;
   userId?: string;
+  signatureData?: string; // Assinatura do usuário em base64
 }
 
 export const usePdfGenerator = () => {
@@ -283,11 +285,149 @@ export const usePdfGenerator = () => {
         { align: "center" }
       );
 
-      yPosition += 30;
+      // Verificar se há espaço suficiente para a assinatura ou adicionar nova página
+      if (yPosition + 150 > pageHeight) {
+        // Não há espaço suficiente, adicionar nova página
+        pdf.addPage();
+        yPosition = 30; // Reiniciar posição Y no topo da nova página com margem
+      } else {
+        yPosition += 50; // Aumentar o espaço após o resumo financeiro
+      }
+
+      // Adicionar assinatura do usuário se existir
+      if (data.signatureData) {
+        // Adicionar uma caixa dedicada para a assinatura com background claro
+        pdf.setFillColor(248, 250, 252); // Azul muito claro
+        pdf.rect(15, yPosition - 10, pageWidth - 30, 70, "F");
+
+        // Adicionar borda à caixa de assinatura
+        pdf.setDrawColor(200, 220, 240);
+        pdf.setLineWidth(0.5);
+        pdf.rect(15, yPosition - 10, pageWidth - 30, 70);
+
+        // Título da seção de assinatura
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(14);
+        pdf.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
+        pdf.text("ASSINATURA DO TITULAR", pageWidth / 2, yPosition, {
+          align: "center",
+        });
+
+        yPosition += 15;
+
+        // Adicionar a imagem da assinatura
+        try {
+          // Converter base64 para imagem
+          const imgData = data.signatureData;
+
+          // Calcular dimensões mantendo proporção
+          const maxWidth = 120; // Aumentar a largura máxima para a assinatura
+
+          // Criar uma imagem temporária para obter as dimensões
+          const img = new Image();
+          img.src = imgData;
+
+          // Ajustar tamanho mantendo proporção
+          let imgWidth = maxWidth;
+          let imgHeight = (img.height * maxWidth) / img.width;
+
+          // Se a imagem for muito pequena, usar tamanho real
+          if (isNaN(imgHeight)) {
+            imgWidth = 100;
+            imgHeight = 50;
+          }
+
+          // Garantir que a altura não seja excessiva
+          if (imgHeight > 60) {
+            imgHeight = 60;
+            imgWidth = (img.width * imgHeight) / img.height;
+          }
+
+          // Adicionar a imagem centralizada horizontalmente
+          const xPosition = pageWidth / 2 - imgWidth / 2;
+          pdf.addImage(
+            imgData,
+            "PNG",
+            xPosition,
+            yPosition,
+            imgWidth,
+            imgHeight
+          );
+
+          // Adicionar linha abaixo da assinatura
+          yPosition += imgHeight + 5;
+          pdf.setDrawColor(darkGray[0], darkGray[1], darkGray[2]);
+          pdf.setLineWidth(0.5);
+          pdf.line(
+            pageWidth / 2 - 60,
+            yPosition,
+            pageWidth / 2 + 60,
+            yPosition
+          );
+
+          // Adicionar texto abaixo da linha
+          yPosition += 5;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          pdf.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
+          pdf.text("Assinatura do titular", pageWidth / 2, yPosition, {
+            align: "center",
+          });
+
+          // Espaço após a assinatura
+          yPosition += 20;
+        } catch (error) {
+          console.error("Erro ao adicionar assinatura:", error);
+          // Adicionar linha para assinatura manual se não for possível adicionar a imagem
+          pdf.setDrawColor(darkGray[0], darkGray[1], darkGray[2]);
+          pdf.setLineWidth(0.5);
+          pdf.line(30, yPosition + 20, pageWidth - 30, yPosition + 20);
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          pdf.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
+          pdf.text("Assinatura do titular", pageWidth / 2, yPosition + 30, {
+            align: "center",
+          });
+
+          yPosition += 40;
+        }
+      } else {
+        // Se não houver assinatura, adicionar espaço para assinatura manual
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(14);
+        pdf.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
+        pdf.text("ASSINATURA DO TITULAR", pageWidth / 2, yPosition, {
+          align: "center",
+        });
+
+        yPosition += 25;
+
+        // Linha para assinatura manual
+        pdf.setDrawColor(darkGray[0], darkGray[1], darkGray[2]);
+        pdf.setLineWidth(0.5);
+        pdf.line(30, yPosition, pageWidth - 30, yPosition);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
+        pdf.text("Assinatura do titular", pageWidth / 2, yPosition + 10, {
+          align: "center",
+        });
+
+        yPosition += 30;
+      }
+
+      // Verificar se há espaço suficiente para as informações adicionais
+      if (yPosition + 60 > pageHeight) {
+        // Não há espaço suficiente, adicionar nova página
+        pdf.addPage();
+        yPosition = 30; // Reiniciar posição Y no topo da nova página com margem
+      } else {
+        yPosition += 10;
+      }
 
       // Seção: Informações Adicionais
-      yPosition += 10;
-
       // Background da seção
       pdf.setFillColor(lightGray[0], lightGray[1], lightGray[2]);
       pdf.rect(15, yPosition - 5, pageWidth - 30, 25, "F");
@@ -365,12 +505,142 @@ export const usePdfGenerator = () => {
       // Fazer download
       pdf.save(fileName);
 
+      // Se tiver userId, salvar o PDF no backend
+      if (data.userId) {
+        try {
+          // Obter o PDF como blob para garantir integridade
+          const blobPdf = pdf.output("blob");
+          console.log("Tamanho do blob PDF:", blobPdf.size, "bytes");
+
+          // Converter blob para base64
+          return new Promise<{
+            success: boolean;
+            fileName: string;
+            error?: string;
+          }>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              try {
+                const pdfBase64 = reader.result as string;
+                console.log(
+                  "Tamanho do PDF base64:",
+                  pdfBase64.length,
+                  "caracteres"
+                );
+
+                // Verificar se o PDF foi convertido corretamente
+                if (!pdfBase64.startsWith("data:application/pdf;base64,")) {
+                  console.error(
+                    "PDF não está no formato esperado:",
+                    pdfBase64.substring(0, 50)
+                  );
+                  resolve({ success: true, fileName });
+                  return;
+                }
+
+                if (pdfBase64.length < 10000) {
+                  console.error(
+                    "PDF base64 está muito pequeno:",
+                    pdfBase64.length
+                  );
+                  resolve({ success: true, fileName });
+                  return;
+                }
+
+                // Enviar para o backend
+                const saved = await savePdfToServer(
+                  data.userId,
+                  pdfBase64,
+                  fileName
+                );
+                console.log("PDF salvo no servidor:", saved);
+                resolve({ success: true, fileName });
+              } catch (error) {
+                console.error("Erro ao processar PDF para servidor:", error);
+                resolve({ success: true, fileName });
+              } finally {
+                setIsGenerating(false);
+              }
+            };
+            reader.onerror = () => {
+              console.error("Erro ao ler blob do PDF");
+              resolve({ success: true, fileName });
+              setIsGenerating(false);
+            };
+            reader.readAsDataURL(blobPdf);
+          });
+        } catch (error) {
+          console.error("Erro ao salvar PDF no servidor:", error);
+          setIsGenerating(false);
+          return { success: true, fileName };
+        }
+      }
+
+      setIsGenerating(false);
       return { success: true, fileName };
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
-      return { success: false, error: "Erro ao gerar PDF" };
-    } finally {
       setIsGenerating(false);
+      return { success: false, error: "Erro ao gerar PDF" };
+    }
+  };
+
+  // Função para salvar o PDF no servidor
+  const savePdfToServer = async (
+    userId: string,
+    pdfBase64: string,
+    fileName: string
+  ) => {
+    try {
+      console.log("Iniciando envio do PDF para o servidor");
+      console.log(`Tamanho da string base64: ${pdfBase64.length} caracteres`);
+
+      // Verificar se o PDF está no formato correto
+      if (!pdfBase64.startsWith("data:application/pdf;base64,")) {
+        console.error(
+          "Formato inválido do PDF. Deve começar com 'data:application/pdf;base64,'"
+        );
+        return false;
+      }
+
+      // Verificar se o PDF tem um tamanho mínimo (pelo menos alguns KB)
+      if (pdfBase64.length < 10000) {
+        console.error(
+          "PDF parece ser muito pequeno para ser válido:",
+          pdfBase64.length,
+          "caracteres"
+        );
+        return false;
+      }
+
+      // Log dos primeiros bytes para diagnóstico
+      console.log(
+        "Primeiros 100 caracteres do PDF base64:",
+        pdfBase64.substring(0, 100)
+      );
+
+      const response = await apiService.request(
+        `/api/enrollment/user/${userId}/pdf`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            pdfData: pdfBase64,
+            fileName,
+          }),
+        }
+      );
+
+      if (response.success) {
+        console.log("PDF salvo no servidor com sucesso");
+        console.log("Detalhes:", response.data);
+        return true;
+      } else {
+        console.error("Erro ao salvar PDF no servidor:", response.message);
+        return false;
+      }
+    } catch (error) {
+      console.error("Erro ao enviar PDF para o servidor:", error);
+      return false;
     }
   };
 

@@ -18,6 +18,7 @@ const app = express();
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // Desabilitar CSP para permitir PDFs em iframes
   })
 );
 
@@ -59,9 +60,13 @@ app.use((req, res, next) => {
   );
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, Content-Disposition"
   );
   res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Expose-Headers",
+    "Content-Disposition, Content-Type"
+  );
 
   // Handle preflight requests
   if (req.method === "OPTIONS") {
@@ -88,7 +93,9 @@ app.use(
       "Authorization",
       "Cookie",
       "X-Requested-With",
+      "Content-Disposition",
     ],
+    exposedHeaders: ["Content-Disposition", "Content-Type"],
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })

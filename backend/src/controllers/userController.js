@@ -396,18 +396,74 @@ export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await prisma.user.delete({
-      where: { id },
+    console.log(`Tentando excluir usuário com ID: ${id}`);
+
+    // Criar uma transação para garantir que todas as operações sejam concluídas ou nenhuma
+    await prisma.$transaction(async (prismaClient) => {
+      // 1. Primeiro, verificar se o usuário existe
+      const userExists = await prismaClient.user.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+
+      if (!userExists) {
+        throw new Error("User not found");
+      }
+
+      console.log("Excluindo documentos do usuário...");
+      // 2. Excluir documentos do usuário
+      await prismaClient.userDocument.deleteMany({
+        where: { userId: id },
+      });
+
+      console.log("Excluindo etapas de adesão do usuário...");
+      // 3. Excluir etapas de adesão
+      await prismaClient.userEnrollmentStep.deleteMany({
+        where: { userId: id },
+      });
+
+      console.log("Excluindo logs de atividade do usuário...");
+      // 4. Excluir logs de atividade
+      await prismaClient.activityLog.deleteMany({
+        where: { userId: id },
+      });
+
+      console.log("Excluindo dependentes do usuário...");
+      // 5. Excluir dependentes
+      await prismaClient.dependent.deleteMany({
+        where: { userId: id },
+      });
+
+      console.log("Excluindo usuário principal...");
+      // 6. Finalmente, excluir o usuário
+      await prismaClient.user.delete({
+        where: { id },
+      });
     });
 
+    console.log(`Usuário ${id} excluído com sucesso`);
     return res
       .status(200)
       .json(new ApiResponse(true, 200, null, "User deleted successfully"));
   } catch (error) {
     console.error("Error deleting user:", error);
+
+    // Fornecer mensagem de erro mais específica
+    const errorMessage =
+      error.message === "User not found"
+        ? "User not found"
+        : "Internal Server Error";
+
     return res
-      .status(500)
-      .json(new ApiResponse(false, 500, null, "Internal Server Error"));
+      .status(error.message === "User not found" ? 404 : 500)
+      .json(
+        new ApiResponse(
+          false,
+          error.message === "User not found" ? 404 : 500,
+          null,
+          errorMessage
+        )
+      );
   }
 };
 

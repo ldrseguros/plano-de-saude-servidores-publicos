@@ -22,6 +22,7 @@ import {
   Edit,
   Trash2,
   Plus,
+  Download,
 } from "lucide-react";
 import {
   apiService,
@@ -32,6 +33,10 @@ import {
   deleteUser,
   CreateUserRequest,
   forceUpdateLeadStatuses,
+  getUserDocuments,
+  getDocumentDownloadUrl,
+  UserDocument,
+  getDocumentDiagnostics,
 } from "@/services/api";
 import { useAuth } from "@/hooks/useAuth";
 import AdminLogin from "@/components/AdminLogin";
@@ -74,6 +79,9 @@ const Admin = () => {
       updatedUsers: number;
     };
   } | null>(null);
+  const [loadingDocuments, setLoadingDocuments] = useState<
+    Record<string, boolean>
+  >({});
 
   const loadData = async () => {
     setLoading(true);
@@ -179,6 +187,104 @@ const Admin = () => {
       } finally {
         setStatusUpdateLoading(false);
       }
+    }
+  };
+
+  // Função para baixar o PDF do usuário
+  const handleDownloadPdf = async (userId: string, userName: string) => {
+    if (loadingDocuments[userId]) return;
+
+    try {
+      // Definir estado de carregamento
+      setLoadingDocuments((prev) => ({ ...prev, [userId]: true }));
+
+      // Buscar documentos do usuário
+      const response = await getUserDocuments(userId);
+
+      if (response.success && response.data && response.data.length > 0) {
+        // Encontrar o documento PDF mais recente (ordenados por data de criação descendente)
+        const latestPdf = response.data.find(
+          (doc) => doc.type === "ENROLLMENT_PDF"
+        );
+
+        if (latestPdf) {
+          try {
+            // Primeiro, tentar verificar o diagnóstico do documento
+            const diagnostics = await getDocumentDiagnostics(latestPdf.id);
+            console.log("Diagnóstico do documento:", diagnostics);
+
+            // Definir tipos para o objeto de diagnóstico
+            interface FileInfo {
+              exists: boolean;
+              canRead: boolean;
+              size: number;
+              stats: Record<string, unknown> | null;
+              directory: string;
+              fullPath: string;
+            }
+
+            interface DiagnosticData {
+              document: UserDocument;
+              fileInfo: FileInfo;
+              directoryInfo: {
+                exists: boolean;
+                path: string;
+                files: string[];
+              };
+            }
+
+            // Se o arquivo não existir ou não for legível, mostrar alerta
+            if (diagnostics.success && diagnostics.data) {
+              // Cast para unknown primeiro e depois para o tipo específico
+              const diagData = diagnostics.data as unknown as DiagnosticData;
+
+              if (
+                diagData.fileInfo.exists === false ||
+                diagData.fileInfo.canRead === false
+              ) {
+                alert(
+                  `Problema com o arquivo PDF: ${
+                    diagData.fileInfo.exists === false
+                      ? "O arquivo não existe no servidor."
+                      : "O arquivo existe mas não pode ser lido."
+                  }`
+                );
+                return;
+              }
+            }
+
+            // Criar URL de download
+            const downloadUrl = getDocumentDownloadUrl(latestPdf.id);
+
+            // Abrir diretamente em uma nova guia do navegador
+            window.open(downloadUrl, "_blank");
+
+            // Log para debug
+            console.log("Abrindo PDF em nova guia:", downloadUrl);
+          } catch (downloadError) {
+            console.error("Erro ao iniciar download:", downloadError);
+            alert(
+              `Erro ao tentar baixar o PDF: ${
+                downloadError instanceof Error
+                  ? downloadError.message
+                  : "Erro desconhecido"
+              }`
+            );
+          }
+          return;
+        }
+      }
+
+      // Se chegar aqui, não encontrou documentos
+      alert(`Não há documentos PDF disponíveis para ${userName}`);
+    } catch (error) {
+      console.error("Erro ao baixar PDF:", error);
+      alert(
+        "Erro ao tentar baixar o PDF do usuário. Verifique o console para mais detalhes."
+      );
+    } finally {
+      // Limpar estado de carregamento
+      setLoadingDocuments((prev) => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -577,6 +683,20 @@ const Admin = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleDownloadPdf(user.id, user.name)}
+                        disabled={loadingDocuments[user.id]}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        {loadingDocuments[user.id] ? (
+                          <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-1" />
+                        )}
+                        Baixar PDF
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setEditingUser(user)}
                         className="text-blue-600 hover:text-blue-700"
                       >
@@ -615,13 +735,31 @@ const Admin = () => {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>Detalhes do Lead</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedUser(null)}
-                >
-                  ✕
-                </Button>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      handleDownloadPdf(selectedUser.id, selectedUser.name)
+                    }
+                    disabled={loadingDocuments[selectedUser.id]}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    {loadingDocuments[selectedUser.id] ? (
+                      <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-1" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedUser(null)}
+                  >
+                    ✕
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">

@@ -45,6 +45,7 @@ enum ActivityType {
   UPDATE
   STEP_COMPLETED
   DOCUMENT_SENT
+  DOCUMENT_CREATED
   PAYMENT_MADE
   APPROVAL
   REJECTION
@@ -78,6 +79,7 @@ model User {
   dependents        Dependent[]
   enrollmentSteps   UserEnrollmentStep[]
   activityLogs      ActivityLog[]
+  documents         UserDocument[]
   
   // Timestamps
   createdAt         DateTime       @default(now())
@@ -116,6 +118,7 @@ model UserEnrollmentStep {
   
   // Step-specific data
   stepData          Json?          // Flexible data per step
+  signatureData     String?        // Base64 da assinatura do usuário
   
   // Relationship
   userId            String
@@ -162,4 +165,23 @@ model AdminUser {
   updatedAt         DateTime       @updatedAt
   
   @@map("admin_users")
+}
+
+// Modelo para guardar documentos do usuário (incluindo PDFs de adesão)
+model UserDocument {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // ENROLLMENT_PDF, CONTRACT, etc.
+  name      String
+  path      String
+  mimeType  String   @default("application/pdf")
+  size      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relação com o usuário
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
 }

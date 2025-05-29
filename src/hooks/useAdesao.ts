@@ -40,6 +40,8 @@ export interface AdesaoState {
   error: string | null;
   userId: string | null;
   showUserExistsModal: boolean;
+  showSignaturePad: boolean;
+  signatureData: string | null;
 }
 
 const initialState: AdesaoState = {
@@ -63,6 +65,8 @@ const initialState: AdesaoState = {
   error: null,
   userId: null,
   showUserExistsModal: false,
+  showSignaturePad: false,
+  signatureData: null,
 };
 
 export const useAdesao = () => {
@@ -94,6 +98,9 @@ export const useAdesao = () => {
 
   const setTermosAceitos = (aceitos: boolean) => {
     updateState({ termosAceitos: aceitos });
+    if (aceitos && !state.signatureData) {
+      updateState({ showSignaturePad: true });
+    }
   };
 
   const setInformacoesCorretas = (corretas: boolean) => {
@@ -110,6 +117,23 @@ export const useAdesao = () => {
 
   const setShowUserExistsModal = (show: boolean) => {
     updateState({ showUserExistsModal: show });
+  };
+
+  const setShowSignaturePad = (show: boolean) => {
+    updateState({ showSignaturePad: show });
+  };
+
+  const setSignatureData = (signatureData: string | null) => {
+    updateState({ signatureData });
+  };
+
+  const handleSignatureSave = (signatureData: string) => {
+    setSignatureData(signatureData);
+    setShowSignaturePad(false);
+  };
+
+  const handleSignatureCancel = () => {
+    setShowSignaturePad(false);
   };
 
   const adicionarDependente = () => {
@@ -280,6 +304,17 @@ export const useAdesao = () => {
 
   // Função para submeter a adesão
   const submitAdesao = async () => {
+    if (
+      !state.termosAceitos ||
+      !state.informacoesCorretas ||
+      !state.signatureData
+    ) {
+      setError(
+        "É necessário aceitar os termos e desenhar sua assinatura para finalizar a adesão."
+      );
+      return { success: false, error: "MISSING_SIGNATURE" };
+    }
+
     setLoading(true);
     setError(null);
 
@@ -443,6 +478,29 @@ export const useAdesao = () => {
         // Continuar mesmo com erro
       }
 
+      // Após completar o processo de adesão, salvar a assinatura do usuário
+      if (userId && state.signatureData) {
+        try {
+          // Salvar a assinatura na etapa de aprovação
+          await apiService.request(
+            `/api/enrollment/user/${userId}/step/APPROVAL`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                step: "APPROVAL",
+                completed: true,
+                signatureData: state.signatureData,
+                notes: "Adesão finalizada com assinatura do usuário",
+              }),
+            }
+          );
+          console.log("Assinatura do usuário salva com sucesso");
+        } catch (signatureError) {
+          console.error("Erro ao salvar assinatura:", signatureError);
+          // Continuar mesmo com erro na assinatura
+        }
+      }
+
       // Atualizar etapa no componente
       updateState({ etapaAtual: 7 });
 
@@ -494,6 +552,8 @@ export const useAdesao = () => {
     setLoading,
     setError,
     setShowUserExistsModal,
+    setShowSignaturePad,
+    setSignatureData,
 
     // Ações
     adicionarDependente,
@@ -505,5 +565,7 @@ export const useAdesao = () => {
     resetForm,
     submitAdesao,
     savePartialProgress,
+    handleSignatureSave,
+    handleSignatureCancel,
   };
 };

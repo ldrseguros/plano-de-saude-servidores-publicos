@@ -30,7 +30,12 @@ import { usePdfGenerator } from "@/hooks/usePdfGenerator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import UserExistsModal from "@/components/UserExistsModal";
 import { useEffect } from "react";
-import { API_BASE_URL } from "@/services/api";
+import {
+  API_BASE_URL,
+  getUserDocuments,
+  getDocumentDownloadUrl,
+} from "@/services/api";
+import SignatureCanvas from "@/components/SignatureCanvas";
 
 const Adesao = () => {
   const {
@@ -45,6 +50,8 @@ const Adesao = () => {
     error,
     userId,
     showUserExistsModal,
+    showSignaturePad,
+    signatureData,
     setEtapaAtual,
     setPlanoSelecionado,
     setOdontologico,
@@ -52,6 +59,8 @@ const Adesao = () => {
     setTermosAceitos,
     setInformacoesCorretas,
     setShowUserExistsModal,
+    setShowSignaturePad,
+    setSignatureData,
     adicionarDependente,
     removerDependente,
     atualizarDependente,
@@ -62,6 +71,8 @@ const Adesao = () => {
     savePartialProgress,
     setLoading,
     setError,
+    handleSignatureSave,
+    handleSignatureCancel,
   } = useAdesao();
 
   const { generatePDF, isGenerating } = usePdfGenerator();
@@ -149,7 +160,7 @@ const Adesao = () => {
     };
 
     saveProgress();
-  }, [etapaAtual]); // Salvar apenas quando a etapa mudar, não com cada alteração de dados
+  }, [etapaAtual, dadosTitular.nome, dadosTitular.email, savePartialProgress]); // Adicionar todas as dependências necessárias
 
   // Função para finalizar a adesão
   const finalizarAdesao = async () => {
@@ -258,18 +269,60 @@ const Adesao = () => {
       })),
       valorTotal: calcularValorTotal(),
       userId: userId || undefined,
+      signatureData: signatureData || undefined,
     };
 
-    const result = await generatePDF(dadosParaPDF);
-    if (result.success) {
-      // Mostrar notificação de sucesso
-      alert(
-        "✅ PDF gerado com sucesso! O download foi iniciado automaticamente."
-      );
-      console.log("PDF gerado com sucesso:", result.fileName);
-    } else {
-      alert("❌ Erro ao gerar PDF. Tente novamente.");
-      console.error("Erro ao gerar PDF:", result.error);
+    try {
+      setLoading(true);
+      const result = await generatePDF(dadosParaPDF);
+
+      if (result.success) {
+        // Mostrar notificação de sucesso
+        alert(
+          "✅ PDF gerado com sucesso! O download foi iniciado automaticamente."
+        );
+        console.log(
+          "PDF gerado com sucesso:",
+          result.success && "fileName" in result ? result.fileName : ""
+        );
+
+        // Se tiver userId, buscar o documento para download
+        if (userId) {
+          try {
+            // Buscar os documentos do usuário
+            const docsResponse = await getUserDocuments(userId);
+
+            if (
+              docsResponse.success &&
+              docsResponse.data &&
+              docsResponse.data.length > 0
+            ) {
+              // Obter o PDF mais recente
+              const latestPdf = docsResponse.data.find(
+                (doc) => doc.type === "ENROLLMENT_PDF"
+              );
+
+              if (latestPdf) {
+                // Abrir o PDF em uma nova guia usando URL direta em vez de popup com iframe
+                window.open(getDocumentDownloadUrl(latestPdf.id), "_blank");
+              }
+            }
+          } catch (downloadError) {
+            console.error(
+              "Erro ao iniciar download do servidor:",
+              downloadError
+            );
+          }
+        }
+      } else {
+        alert("❌ Erro ao gerar PDF. Tente novamente.");
+        console.error("Erro ao gerar PDF:", result.error);
+      }
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      alert("❌ Ocorreu um erro inesperado. Tente novamente mais tarde.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -959,15 +1012,56 @@ const Adesao = () => {
           </div>
         </div>
 
+        {termosAceitos && showSignaturePad && (
+          <div className="mt-6">
+            <h3 className="text-lg font-bold mb-2">Sua Assinatura</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Desenhe sua assinatura no campo abaixo para confirmar sua adesão.
+            </p>
+            <SignatureCanvas
+              onSave={handleSignatureSave}
+              onCancel={handleSignatureCancel}
+            />
+          </div>
+        )}
+
+        {signatureData && (
+          <div className="mt-6">
+            <h3 className="text-lg font-bold mb-2">Assinatura Confirmada</h3>
+            <div className="border-2 border-green-200 rounded-lg p-4 max-w-md">
+              <img
+                src={signatureData}
+                alt="Sua assinatura"
+                className="max-h-24 mx-auto"
+              />
+              <div className="text-center mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSignaturePad(true)}
+                  className="text-xs"
+                >
+                  Refazer assinatura
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-between mt-8">
           <Button variant="outline" onClick={etapaAnterior} disabled={loading}>
             <ArrowLeft className="mr-2 w-4 h-4" /> Voltar
           </Button>
           <Button
             onClick={finalizarAdesao}
-            disabled={!termosAceitos || !informacoesCorretas || loading}
+            disabled={
+              !termosAceitos ||
+              !informacoesCorretas ||
+              !signatureData ||
+              loading
+            }
             className={
-              termosAceitos && informacoesCorretas
+              termosAceitos && informacoesCorretas && signatureData
                 ? "bg-green-600 hover:bg-green-700"
                 : ""
             }
