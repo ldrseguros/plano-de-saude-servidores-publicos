@@ -16,8 +16,12 @@ const Header = () => {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">BS</span>
+            <div className="flex items-center justify-center">
+              <img
+                src="https://aureumseguros.com.br/wp-content/uploads/2025/05/brasil-saude-1.png"
+                alt="Logo"
+                className="w-15 h-10"
+              />
             </div>
             <span className="text-lg sm:text-xl text-gray-800 font-bold">
               Plano Brasil Saúde para Servidores de Anicuns
