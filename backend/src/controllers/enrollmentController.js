@@ -1,5 +1,6 @@
 import prisma from "../config/database.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { enviarNotificacoesAdesao } from "../services/notificationService.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -246,6 +247,53 @@ export const completeEnrollmentStep = async (req, res) => {
       console.log(
         `Adesão finalizada com sucesso. Atualizando status para GREEN`
       );
+
+      // Buscar o documento mais recente gerado para este usuário
+      const ultimoDocumento = await prisma.userDocument.findFirst({
+        where: {
+          userId,
+          type: "ENROLLMENT_PDF",
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      // Enviar notificações de adesão completa de forma assíncrona
+      try {
+        const documentId = ultimoDocumento?.id || null;
+        console.log(
+          `Iniciando envio de notificações para usuário ${userId} com documento ${documentId}`
+        );
+
+        // Enviar de forma assíncrona para não bloquear a resposta
+        setImmediate(async () => {
+          try {
+            const resultadoNotificacoes = await enviarNotificacoesAdesao(
+              userId,
+              documentId
+            );
+            console.log(
+              `Notificações processadas para usuário ${userId}:`,
+              resultadoNotificacoes
+            );
+          } catch (notificationError) {
+            console.error(
+              `Erro ao enviar notificações para usuário ${userId}:`,
+              notificationError.message
+            );
+          }
+        });
+
+        console.log(
+          `Processo de notificações iniciado para o usuário ${userId}`
+        );
+      } catch (notificationError) {
+        // Log do erro mas não interrompe o fluxo
+        console.error(
+          `Erro ao iniciar processo de notificações: ${notificationError.message}`
+        );
+      }
     }
     // Se estamos na primeira etapa, status deve ser YELLOW (iniciado)
     else if (currentStepIndex === 0) {

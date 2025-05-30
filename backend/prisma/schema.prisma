@@ -80,6 +80,7 @@ model User {
   enrollmentSteps   UserEnrollmentStep[]
   activityLogs      ActivityLog[]
   documents         UserDocument[]
+  notificationLogs  NotificationLog[]
   
   // Timestamps
   createdAt         DateTime       @default(now())
@@ -184,4 +185,25 @@ model UserDocument {
 
   @@index([userId])
   @@index([type])
+}
+
+// Modelo para logs de notificações
+model NotificationLog {
+  id            String   @id @default(uuid())
+  userId        String
+  type          String   // EMAIL, WHATSAPP, SMS, etc.
+  status        String   // PENDING, SENT, ERROR, RETRYING
+  message       String
+  data          Json?    // Dados enviados na notificação
+  responseData  Json?    // Resposta do serviço de envio
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relação com o usuário
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@map("notification_logs")
 }

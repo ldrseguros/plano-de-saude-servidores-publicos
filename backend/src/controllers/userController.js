@@ -398,33 +398,42 @@ export const deleteUser = async (req, res) => {
 
     console.log(`Tentando excluir usuário com ID: ${id}`);
 
+    // Primeiro, verificar se o usuário existe fora da transação
+    const userExists = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!userExists) {
+      console.log(`Usuário com ID ${id} não encontrado`);
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "User not found"));
+    }
+
     // Criar uma transação para garantir que todas as operações sejam concluídas ou nenhuma
     await prisma.$transaction(async (prismaClient) => {
-      // 1. Primeiro, verificar se o usuário existe
-      const userExists = await prismaClient.user.findUnique({
-        where: { id },
-        select: { id: true },
-      });
-
-      if (!userExists) {
-        throw new Error("User not found");
-      }
-
       console.log("Excluindo documentos do usuário...");
-      // 2. Excluir documentos do usuário
+      // 1. Excluir documentos do usuário
       await prismaClient.userDocument.deleteMany({
         where: { userId: id },
       });
 
       console.log("Excluindo etapas de adesão do usuário...");
-      // 3. Excluir etapas de adesão
+      // 2. Excluir etapas de adesão
       await prismaClient.userEnrollmentStep.deleteMany({
         where: { userId: id },
       });
 
       console.log("Excluindo logs de atividade do usuário...");
-      // 4. Excluir logs de atividade
+      // 3. Excluir logs de atividade
       await prismaClient.activityLog.deleteMany({
+        where: { userId: id },
+      });
+
+      console.log("Excluindo logs de notificação do usuário...");
+      // 4. Excluir logs de notificação
+      await prismaClient.notificationLog.deleteMany({
         where: { userId: id },
       });
 
@@ -448,22 +457,16 @@ export const deleteUser = async (req, res) => {
   } catch (error) {
     console.error("Error deleting user:", error);
 
-    // Fornecer mensagem de erro mais específica
-    const errorMessage =
-      error.message === "User not found"
-        ? "User not found"
-        : "Internal Server Error";
+    // Se for um erro específico do Prisma (P2025 = Record not found)
+    if (error.code === "P2025") {
+      return res
+        .status(404)
+        .json(new ApiResponse(false, 404, null, "User not found"));
+    }
 
     return res
-      .status(error.message === "User not found" ? 404 : 500)
-      .json(
-        new ApiResponse(
-          false,
-          error.message === "User not found" ? 404 : 500,
-          null,
-          errorMessage
-        )
-      );
+      .status(500)
+      .json(new ApiResponse(false, 500, null, "Internal Server Error"));
   }
 };
 

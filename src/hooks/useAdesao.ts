@@ -239,14 +239,46 @@ export const useAdesao = () => {
       console.log("Salvando progresso parcial...");
 
       // Se já temos userId, retornar sem fazer chamada à API
-      if (userId) {
+      if (userId && !userId.toString().startsWith("temp_")) {
         console.log(`Usando ID existente: ${userId}`);
         localStorage.setItem(`last_save_time_${userId}`, Date.now().toString());
         return { success: true, userId };
       }
 
-      // A partir daqui, apenas executar o código se não tivermos userId
+      // A partir daqui, apenas executar o código se não tivermos userId válido
       try {
+        // Primeiro, tentar buscar se o usuário já existe
+        console.log("Verificando se usuário já existe por email/CPF...");
+        const searchResponse = await fetch(
+          `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
+            state.dadosTitular.email
+          )}&cpf=${encodeURIComponent(state.dadosTitular.cpf || "")}`
+        );
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+
+          if (
+            searchData.success &&
+            searchData.data &&
+            searchData.data.length > 0
+          ) {
+            userId = searchData.data[0].id;
+            console.log(
+              `Usuário já existe com ID: ${userId}. Usando usuário existente.`
+            );
+            updateState({ userId });
+            localStorage.setItem(
+              `last_save_time_${userId}`,
+              Date.now().toString()
+            );
+            return { success: true, userId };
+          }
+        }
+
+        // Se chegou aqui, usuário não existe - criar novo
+        console.log("Usuário não existe. Criando novo usuário...");
+
         // Preparar dados básicos do usuário
         const userData: CreateUserRequest = {
           name: state.dadosTitular.nome,
@@ -277,12 +309,49 @@ export const useAdesao = () => {
         localStorage.setItem(`last_save_time_${userId}`, Date.now().toString());
         return { success: true, userId };
       } catch (error) {
+        console.error("Erro ao processar usuário:", error);
+
+        // Se o erro é que o usuário já existe, tentar buscar o ID
+        if (
+          error instanceof Error &&
+          error.message.includes("already exists")
+        ) {
+          console.log("Usuário já existe, tentando buscar ID...");
+
+          try {
+            const searchResponse = await fetch(
+              `${API_BASE_URL}/api/users/search?email=${encodeURIComponent(
+                state.dadosTitular.email
+              )}`
+            );
+
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+
+              if (
+                searchData.success &&
+                searchData.data &&
+                searchData.data.length > 0
+              ) {
+                userId = searchData.data[0].id;
+                console.log(`Recuperado ID do usuário existente: ${userId}`);
+                updateState({ userId });
+                localStorage.setItem(
+                  `last_save_time_${userId}`,
+                  Date.now().toString()
+                );
+                return { success: true, userId };
+              }
+            }
+          } catch (searchError) {
+            console.error("Erro ao buscar usuário existente:", searchError);
+          }
+        }
+
         // Marcar erro recente para evitar ciclos repetidos
         localStorage.setItem("last_api_error_time", Date.now().toString());
 
-        console.error("Erro ao criar usuário:", error);
-
-        // Gerar ID temporário local se não conseguirmos criar usuário no servidor
+        // Gerar ID temporário local se não conseguirmos criar/encontrar usuário no servidor
         if (!userId) {
           const tempId = `temp_${Date.now()}`;
           console.log("Criando ID temporário local:", tempId);
@@ -290,7 +359,7 @@ export const useAdesao = () => {
           return { success: true, userId: tempId };
         }
 
-        return { success: false, error };
+        return { success: false, error: error.message };
       }
     } catch (error) {
       console.error("Erro ao salvar progresso parcial:", error);
@@ -298,7 +367,7 @@ export const useAdesao = () => {
       // Marcar erro recente para evitar ciclos repetidos
       localStorage.setItem("last_api_error_time", Date.now().toString());
 
-      return { success: false, error };
+      return { success: false, error: error.message };
     }
   };
 

@@ -11,6 +11,7 @@ import userRoutes from "./src/routes/userRoutes.js";
 import dependentRoutes from "./src/routes/dependentRoutes.js";
 import enrollmentRoutes from "./src/routes/enrollmentRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
+import notificationRoutes from "./src/routes/notificationRoutes.js";
 
 const app = express();
 
@@ -138,6 +139,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/dependents", dependentRoutes);
 app.use("/api/enrollment", enrollmentRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Root endpoint
 app.get("/", (req, res) => {
@@ -151,6 +153,7 @@ app.get("/", (req, res) => {
       users: "/api/users",
       dependents: "/api/dependents",
       enrollment: "/api/enrollment",
+      notifications: "/api/notifications",
     },
   });
 });
